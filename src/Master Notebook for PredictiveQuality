@@ -1,0 +1,50 @@
+import json
+
+#Retry notebook excecution
+def run_with_retry(notebook, timeout, args = {}, max_retries = 3):
+  num_retries = 0
+  while True:
+    try:
+      return dbutils.notebook.run(notebook, timeout, args)
+    except Exception as e:
+      if num_retries > max_retries:
+        print("Error >> "+e)
+        raise e
+      else:
+        print("Retrying error >> {0}".format(e))
+        num_retries += 1
+        return dbutils.notebook.run(notebook, timeout, args)
+        
+#This job will run the following notebook synchronously.        
+
+notebooks = ["/Shared/ML_Notebook/PredictiveQualityMV/PredictiveQualityMV", "/Shared/ML_Notebook/PredictiveQualityMV/AssembleZontecTableMV_v2", "/Shared/ML_Notebook/PredictiveQualityPreston/PredictiveQualityPreston"]
+
+email_notebook = ["/Shared/ML_Notebook/EmailNotification/SendEmailNotification"]
+
+query = """select Zontec_Date as Production_Date
+  , Zontec_Flavor as Flavor
+  , Predicted_Prob as Predicted_Prob
+  , Location as Location
+from datasci.copacker_pred_output_tbl
+where (Predicted_Prob > 0.25
+       and Process_Date = (select max(date1) as Process_Date
+                           from datasci.model_config_tbl
+                           where model = 'MVT3_PL_1.1')
+       and Location = '63') -- MV case
+   or
+       (Predicted_Prob > 0.5
+       and Process_Date = (select max(date1) as Process_Date
+                           from datasci.model_config_tbl
+                           where model = 'PRT2_PQ_1')
+       and Location = '01') -- Preston case
+order by Location, Zontec_Date desc"""
+
+recipients = dbutils.widgets.getArgument('recipients',"{}")
+
+for notebook in notebooks:
+   print(notebook)
+   run_with_retry(notebook, 1200, args={"isDailyJob":"True"},max_retries = 2)
+
+for notebook in email_notebook:
+  print(notebook)
+  run_with_retry(notebook, 1200, args={"query":query, "file_name":"predictive_quality", "recipients":recipients},max_retries = -1)

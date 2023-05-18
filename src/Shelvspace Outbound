@@ -38,7 +38,7 @@ import requests
 fileFp	= open(filepath,'r')
 
 url = 'https://data.shelvspace.com/api/1/custom-alerts'
-header = {'Authorization' : 'Bearer HpCC6PYf1o'}
+header = {'Authorization' : 'Bearer'}
 
 data = {'format': 'AlertsWithScores',
 		'emailOnSuccess' : 'jacob@shelvspace.com',

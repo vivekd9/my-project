@@ -1,0 +1,25 @@
+import json
+
+#Retry notebook excecution
+def run_with_retry(notebook, timeout, args = {}, max_retries = 3):
+  num_retries = 0
+  while True:
+    try:
+      return dbutils.notebook.run(notebook, timeout, args)
+    except Exception as e:
+      if num_retries > max_retries:
+        print("Error >> "+e)
+        raise e
+      else:
+        print("Retrying error >> "+e)
+        num_retries += 1
+        return dbutils.notebook.run(notebook, timeout, args)
+        
+#This job will run the following notebook synchronously.        
+
+notebooks = ["./Extract Shelvspace data", "/Shared/ML_Notebook/AlertMessageSystem/AlertMessageSystem", "./Shelvspace Outbound"]
+
+for notebook in notebooks:
+   print(notebook)
+   run_with_retry(notebook, 10800, args={"isDailyJob":"True"},max_retries = 2)
+    

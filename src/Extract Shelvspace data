@@ -1,0 +1,91 @@
+import requests
+import json 
+from datetime import timedelta, date
+url_login = 'https://api.customer.shelvspace.com/v1/login'
+
+
+#function to login and obtain apikey for future requests
+def apikey(): 
+    values = {
+      'username' : dbutils.secrets.get(scope = "uap-pipeline-secrets", key = "shelvspace-username"),
+      'password' : dbutils.secrets.get(scope = "uap-pipeline-secrets", key = "shelvspace-password")
+    }
+    headers = { 'Content-Type' : 'application/json' }
+    response = requests.post(url_login, data=json.dumps(values), headers=headers)
+    parsed_json = json.loads(response.text)
+    apitoken = parsed_json["token"]
+    return apitoken
+    
+
+def processresult(apidata):
+    #for each form submission collect desired data
+    result = []      
+    for row in apidata:
+        #list of columns wanted from each submission
+        subresult = []
+        subresult.append(row.get('id'))
+        subresult.append(row['account'].get('id'))
+        subresult.append(row['account'].get('name'))
+        subresult.append(row['store'].get('id'))
+        subresult.append(row['store'].get('dataId'))
+        subresult.append(row['store'].get('name'))
+        subresult.append(row['store'].get('address'))
+        subresult.append(row['store'].get('city'))
+        subresult.append(row['store'].get('state'))
+        subresult.append(row['store'].get('zip'))
+        subresult.append(row['form'].get('id'))
+        subresult.append(row['form'].get('name'))
+        subresult.append(row['user'].get('id'))
+        subresult.append(row['user'].get('firstName'))
+        subresult.append(row['user'].get('lastName'))
+        subresult.append(row['user'].get('username'))
+        subresult.append(row['location'].get('latitude')) 
+        subresult.append(row['location'].get('longitude'))
+        subresult.append(json.dumps(row.get('responses')))
+        submittedAtVal = datetime.datetime.strptime(row.get('submittedAt'),"%Y-%m-%d %H:%M:%S")
+        subresult.append(submittedAtVal)
+        result.append(subresult)   
+    return result
+  
+#function to grab api data based on which form you want and data ranges
+def getinfo(token, formid, sdate, edate): 
+    page = 0
+    global apidata
+     #construct URL              
+    shelspaceurl = baseurl + formid + '&sort=submittedAt&per_page=1000'
+    safter = '&submitted_after=' + str(sdate) + ' 00:00:00' 
+    sbefore = '&submitted_before=' + str(edate) + ' 23:59:59'
+    shelspaceurl = shelspaceurl + safter + sbefore 
+    print(shelspaceurl)
+    print("aggresult count %s",len(aggresult))
+    remainingpages = -1
+    while remainingpages != 0:      
+        addpage = '&page=' + str(page) 
+        url = shelspaceurl + addpage 
+        h = {'Authorization' : 'Bearer ' + token}
+        # make the API request 
+        req = requests.get(url, headers=h) 
+        
+        if req.status_code != 200:
+          return
+        #retreive number or results and calculate number of page iterations needed based on page size  
+        totalcount = req.headers.get('Total-Count')
+        print(totalcount)
+        if str(totalcount) == "None":
+            totalpages = 0
+        else:
+            totalpages = math.floor(int(totalcount)/1000)
+        print ("Page: " + str(page) + "/" + str(totalpages))
+        # parse out request result JSON 
+        apidata = json.loads(req.text)
+        result = processresult(apidata)
+        print("result count %s",len(result))
+        for value in result:
+            aggresult.append(value)
+        if int(totalcount) <= 1000:
+          remainingpages = 0
+        else:
+          remainingpages = totalpages - page
+          page += 1
+
+    

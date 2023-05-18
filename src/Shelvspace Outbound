@@ -1,0 +1,53 @@
+%md
+Optimize delta table so that it will not have many small files
+
+%sql
+OPTIMIZE datasci.sales_alerts_tbl
+
+%md
+Extract data to csv file with **"** for escaping quotes inside an already quoted value. 
+
+import csv
+alert_message=spark.sql('''select VipId,score,alert 
+from datasci.sales_alerts_tbl
+where processdate = (select max(processdate) from datasci.sales_alerts_tbl)
+and VipId in (select distinct `VPID#` as VipId from businessrules.vip_vipout_bronze)''')
+print(alert_message.count())
+alert_message.coalesce(1).write.mode('overwrite').csv('/FileStore/Custom_alert/', header=True, escape='"')
+
+%md
+Rename CSV filename to AlertYYYYMMDD
+
+import os
+from datetime import datetime
+
+path= '/dbfs/FileStore/Custom_alert/'
+timestamp  = datetime.today().strftime('%Y%m%d')
+filename= 'Alert'+ timestamp +'.csv'
+filepath= "/dbfs/FileStore/Custom_alert/"+filename
+print(filepath,filename)
+for files in os.listdir(path):
+  if files.startswith("part"):
+    os.rename('/dbfs/FileStore/Custom_alert/'+files, filepath)
+    
+    %md
+Upload the CSV file using Shelvspace API
+
+import requests
+
+fileFp	= open(filepath,'r')
+
+url = 'https://data.shelvspace.com/api/1/custom-alerts'
+header = {'Authorization' : 'Bearer HpCC6PYf1o'}
+
+data = {'format': 'AlertsWithScores',
+		'emailOnSuccess' : 'jacob@shelvspace.com',
+		'emailOnFailure' : 'jacob@shelvspace.com'}
+files = {'file': (filename, fileFp, 'text/csv')}
+
+response = requests.post(url, headers=header, files=files, data=data)
+print(response.status_code)
+print(response.reason)
+print(response.text)
+
+dbutils.fs.rm("dbfs:/FileStore/Custom_alert",True)

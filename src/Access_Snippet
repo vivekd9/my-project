@@ -1,0 +1,21 @@
+%python
+from configparser import ConfigParser
+import json
+org_id = (spark.sparkContext.getConf().get('spark.databricks.clusterUsageTags.clusterOwnerOrgId'))
+master_config = ConfigParser()
+master_config.read('/dbfs/code/config/master.cfg')
+config = ConfigParser()
+if int(org_id) in json.loads(master_config.get('Workspace id', 'dev')):
+  config.read("/dbfs/code/config/dev.cfg")
+elif int(org_id) in json.loads(master_config.get('Workspace id', 'prod')):
+  config.read("/dbfs/code/config/prod.cfg")
+else:
+  raise Exception('Unable to identify organization...')
+  
+storageacct = config.get('Storage Account', 'storageAccountName')
+spark.conf.set("fs.azure.account.auth.type."+ storageacct +".dfs.core.windows.net", "OAuth")
+spark.conf.set("fs.azure.account.oauth.provider.type."+ storageacct +".dfs.core.windows.net", "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider")
+spark.conf.set("fs.azure.account.oauth2.client.id."+ storageacct +".dfs.core.windows.net", dbutils.secrets.get(scope=config.get('SQL Server', 'secretScope'), key=config.get('Storage Account', 'spnClientIDKey')))
+spark.conf.set("fs.azure.account.oauth2.client.secret."+ storageacct +".dfs.core.windows.net", dbutils.secrets.get(scope=config.get('SQL Server', 'secretScope'), key=config.get('Storage Account', 'spnSecretKey')))
+spark.conf.set("fs.azure.account.oauth2.client.endpoint."+ storageacct +".dfs.core.windows.net", "https://login.microsoftonline.com/"+ dbutils.secrets.get(scope=config.get('SQL Server', 'secretScope'), key=config.get('Storage Account', 'spnTenantIDKey')) +"/oauth2/token")
+spark.conf.set("fs.azure.createRemoteFileSystemDuringInitialization", "true")
